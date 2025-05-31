@@ -1,3 +1,5 @@
+# utils/llm_handler.py
+
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
@@ -16,28 +18,38 @@ model = AutoModelForCausalLM.from_pretrained(
     offload_folder="./offload"
 )
 
-print("生成テスト...")
-input_text = "日本の司法制度について教えてください。"
-input_ids = tokenizer.encode(input_text, return_tensors="pt")
-
-# attention_mask の作成
-attention_mask = torch.ones_like(input_ids)
-
-# GPUがあれば移動
 if torch.cuda.is_available():
-    input_ids = input_ids.to("cuda")
-    attention_mask = attention_mask.to("cuda")
     model = model.to("cuda")
 
-# テキスト生成
-output = model.generate(
-    input_ids,
-    attention_mask=attention_mask,
-    max_new_tokens=10,
-    pad_token_id=tokenizer.eos_token_id  # 警告を避けるため
-)
+def extract_keywords_from_problem(problem_text: str) -> list:
+    prompt = f"""
+    あなたは司法試験に詳しい法律アシスタントです。
+    以下の問題文から、関係する法律論点を3つ程度、キーワード形式で抽出してください。
+    問題文：
+    {problem_text}
+    キーワード：
+    """
+    input_ids = tokenizer.encode(prompt, return_tensors="pt")
+    attention_mask = torch.ones_like(input_ids)
 
-# 結果表示
-print(tokenizer.decode(output[0], skip_special_tokens=True))
+    if torch.cuda.is_available():
+        input_ids = input_ids.to("cuda")
+        attention_mask = attention_mask.to("cuda")
+
+    output_ids = model.generate(
+        input_ids,
+        attention_mask=attention_mask,
+        max_new_tokens=50,  # キーワードなので適度に
+        pad_token_id=tokenizer.eos_token_id
+    )
+    output_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+    # プロンプトの入力文を含むので、それ以降の生成テキストだけ抜き出す
+    extracted = output_text.split("キーワード：")[-1]
+
+    # 改行で区切り、箇条書きや・があれば除去
+    keywords = [kw.strip("・ ・\n\r") for kw in extracted.strip().split("\n") if kw.strip()]
+    return keywords
+
 
 

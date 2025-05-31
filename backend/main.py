@@ -1,16 +1,22 @@
-# main.py
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from pydantic import BaseModel
 import json
+from fastapi.middleware.cors import CORSMiddleware
 from utils.llm_handler import extract_keywords_from_problem
 
 app = FastAPI()
 
-# モデル
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 class ProblemRequest(BaseModel):
     text: str
 
-# 判例データのロード
 with open("data/hanrei.json", encoding="utf-8") as f:
     hanrei_data = json.load(f)
 

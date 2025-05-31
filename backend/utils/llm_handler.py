@@ -1,7 +1,25 @@
 # utils/llm_handler.py
-import openai
 
-openai.api_key = "YOUR_API_KEY"  # 環境変数で管理推奨
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
+model_id = "rinna/japanese-gpt2-small"
+
+print("トークナイザ読み込み中...")
+tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
+
+print("モデル読み込み中...")
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map="auto",
+    torch_dtype=torch.float32,
+    low_cpu_mem_usage=True,
+    trust_remote_code=True,
+    offload_folder="./offload"
+)
+
+if torch.cuda.is_available():
+    model = model.to("cuda")
 
 def extract_keywords_from_problem(problem_text: str) -> list:
     prompt = f"""
@@ -11,10 +29,25 @@ def extract_keywords_from_problem(problem_text: str) -> list:
     {problem_text}
     キーワード：
     """
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
+    input_ids = tokenizer.encode(prompt, return_tensors="pt")
+    attention_mask = torch.ones_like(input_ids)
+
+    if torch.cuda.is_available():
+        input_ids = input_ids.to("cuda")
+        attention_mask = attention_mask.to("cuda")
+
+    output_ids = model.generate(
+        input_ids,
+        attention_mask=attention_mask,
+        max_new_tokens=50,  # キーワードなので適度に
+        pad_token_id=tokenizer.eos_token_id
     )
-    keywords_text = response.choices[0].message.content
-    return [kw.strip("・ ") for kw in keywords_text.strip().split("\n") if kw.strip()]
+    output_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+    # プロンプトの入力文を含むので、それ以降の生成テキストだけ抜き出す
+    extracted = output_text.split("キーワード：")[-1]
+
+    # 改行で区切り、箇条書きや・があれば除去
+    keywords = [kw.strip("・ ・\n\r") for kw in extracted.strip().split("\n") if kw.strip()]
+    return keywords
+

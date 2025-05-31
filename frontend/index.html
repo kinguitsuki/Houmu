@@ -1,0 +1,27 @@
+<!-- frontend/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>判例検索</title>
+</head>
+<body>
+  <h1>判例検索</h1>
+  <textarea id="input" rows="4" cols="50"></textarea><br>
+  <button onclick="search()">検索</button>
+  <pre id="result"></pre>
+
+  <script>
+    async function search() {
+      const text = document.getElementById("input").value;
+      const res = await fetch("http://127.0.0.1:8000/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      const data = await res.json();
+      document.getElementById("result").innerText = JSON.stringify(data, null, 2);
+    }
+  </script>
+</body>
+</html>
